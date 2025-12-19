@@ -2,7 +2,7 @@ VITON_APP
 
 VITON_APP is a custom, commercial-ready reimplementation of the VITON pipeline for virtual try-on, based on Zalando-style datasets.
 
-This repository currently implements Phase 1: WarpNet training, which learns to warp a clothing mask to match the target person pose.
+This repository implements Phase 1 (WarpNet) and Phase 2 (RenderNet) of a VITON-style virtual try-on pipeline. WarpNet learns to warp a clothing mask to the target person pose, and RenderNet synthesizes the final try-on image.
 
 The project is designed to be:
 	•	modular
@@ -16,13 +16,16 @@ Project Structure
 
 VITON_APP/
 ├── data/
-│   └── warp_dataset.py        # Dataset loader for WarpNet
+│   ├── warp_dataset.py        # Dataset loader for WarpNet
+│   └── render_dataset.py      # Dataset loader for RenderNet
 ├── models/
-│   └── warpnet.py             # WarpNet model (flow prediction)
+│   ├── warpnet.py             # WarpNet model (flow prediction)
+│   └── rendernet.py           # RenderNet (final image synthesis)
 ├── utils/
 │   └── losses.py              # Loss functions (TV loss)
 ├── train/
-│   └── train_warp.py          # Training script for WarpNet
+│   ├── train_warp.py          # Training script for WarpNet
+│   └── train_render.py        # Training script for RenderNet
 ├── datasets/                  # (NOT committed) training data
 ├── checkpoints/               # (NOT committed) model checkpoints
 ├── debug/                     # (NOT committed) debug visualizations
@@ -111,6 +114,66 @@ Target
 Outputs
 	•	Dense flow field
 	•	Warped cloth mask
+
+⸻
+
+Phase 2 — RenderNet Training
+
+Goal
+
+Train a RenderNet that synthesizes the final try-on image using the warped clothing predicted by WarpNet.
+
+Inputs
+    • Agnostic person image
+    • Rendered OpenPose image
+    • Warped cloth image (from frozen WarpNet)
+    • Warped cloth mask
+
+Target
+    • Ground-truth person image wearing the target garment
+
+Outputs
+    • Final synthesized try-on image
+
+Important Design Notes
+
+    • WarpNet is frozen during Phase 2 training
+    • No gradients flow through grid_sample
+    • This avoids MPS / CPU backward issues and matches the original VITON training strategy
+    • Training is stable on CPU, MPS, and CUDA
+
+Run RenderNet Training
+
+Example command:
+
+PYTHONPATH=. python train/train_render.py \
+  --data_root datasets/chiqado_v1/processed \
+  --split train \
+  --warp_ckpt checkpoints/warpnet/warp_final.pth \
+  --out checkpoints/rendernet \
+  --debug_dir debug/rendernet \
+  --batch_size 2 \
+  --epochs 5 \
+  --height 512 \
+  --width 384 \
+  --workers 2 \
+  --debug_every 200
+
+Outputs
+
+Checkpoints:
+checkpoints/rendernet/
+├── render_epoch1.pth
+├── render_epoch2.pth
+└── render_final.pth
+
+Debug visualizations:
+debug/rendernet/
+Each debug grid shows:
+    1. Agnostic person
+    2. Warped cloth
+    3. Rendered output
+    4. Ground-truth image
 
 ⸻
 
@@ -233,9 +296,9 @@ pip freeze > requirements.txt
 
 Current Status
 
-✅ Phase 1 (WarpNet) implemented and training
-⏭ Phase 2: RenderNet (final image synthesis)
-⏭ Phase 3: Inference pipeline
+✅ Phase 1 (WarpNet) implemented and trained  
+✅ Phase 2 (RenderNet) implemented and trained  
+⏭ Phase 3: Inference pipeline  
 ⏭ Phase 4: Deployment & app integration
 
 ⸻
